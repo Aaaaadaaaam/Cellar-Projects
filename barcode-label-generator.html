@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barcode Label Generator — Adam Takacs</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f5f4f0; --surface: #ffffff; --border: #ddd9d0; --border-light: #eae7e0;
+    --text: #1a1916; --text-muted: #6b6860; --text-hint: #a09d97;
+    --accent: #2563eb;
+    --danger: #dc2626; --danger-bg: #fef2f2; --danger-border: #fecaca;
+    --success: #16a34a; --radius: 8px; --radius-lg: 12px;
+  }
+  body { font-family: 'Georgia','Times New Roman',serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem; }
+  .container { max-width: 860px; margin: 0 auto; }
+  header { margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 2px solid var(--text); }
+  .made-by { font-family: 'Georgia', serif; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+  header h1 { font-size: 42px; font-weight: normal; letter-spacing: -1.5px; line-height: 1; margin-bottom: 6px; }
+  header h1 span { font-style: italic; }
+  header .subtitle { font-size: 13px; color: var(--text-muted); font-family: 'Courier New', monospace; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1rem; }
+  .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 1rem; font-family: 'Courier New', monospace; }
+  .config-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+  .config-item { display: flex; flex-direction: column; gap: 4px; }
+  .config-item label { font-size: 11px; color: var(--text-muted); font-family: 'Courier New', monospace; text-transform: uppercase; letter-spacing: 0.5px; }
+  select { height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; outline: none; font-family: 'Courier New', monospace; }
+  select:focus { border-color: var(--accent); }
+  .mode-toggle { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; width: fit-content; margin-bottom: 1.25rem; }
+  .mode-btn { padding: 8px 20px; font-size: 13px; cursor: pointer; background: transparent; border: none; color: var(--text-muted); font-family: 'Courier New', monospace; transition: background 0.15s, color 0.15s; }
+  .mode-btn.active { background: var(--text); color: var(--surface); }
+  .mode-btn:not(.active):hover { background: var(--bg); color: var(--text); }
+  .pane { display: none; } .pane.active { display: block; }
+  .label-count { font-size: 12px; font-family: 'Courier New', monospace; color: var(--text-muted); margin-bottom: 10px; min-height: 18px; }
+  .entry-list { margin-bottom: 12px; max-height: 220px; overflow-y: auto; }
+  .entry-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border-light); border-radius: var(--radius); margin-bottom: 5px; background: var(--bg); }
+  .entry-row:hover { border-color: var(--border); }
+  .entry-num { font-size: 11px; color: var(--text-hint); font-family: 'Courier New', monospace; min-width: 22px; }
+  .entry-name { flex: 1; font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry-code { font-size: 12px; color: var(--text-muted); font-family: 'Courier New', monospace; margin-right: 4px; }
+  .btn-remove { background: none; border: none; color: var(--text-hint); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 5px; border-radius: 4px; }
+  .btn-remove:hover { color: var(--danger); background: var(--danger-bg); }
+  .add-row { display: flex; gap: 8px; }
+  input[type="text"] { flex: 1; height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 14px; font-family: 'Georgia', serif; outline: none; transition: border-color 0.15s; }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input.code-field { flex: 0 0 160px; font-family: 'Courier New', monospace; font-size: 13px; }
+  .dump-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .dump-col label { display: block; font-size: 11px; color: var(--text-muted); font-family: 'Courier New', monospace; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 13px; font-family: 'Courier New', monospace; resize: vertical; outline: none; line-height: 1.7; height: 180px; }
+  textarea:focus { border-color: var(--accent); }
+  .dump-counter { display: flex; justify-content: space-between; margin-top: 4px; }
+  .dump-counter span { font-size: 11px; font-family: 'Courier New', monospace; color: var(--text-hint); }
+  .dump-counter span.mismatch { color: var(--danger); font-weight: bold; }
+  .dump-counter span.match { color: var(--success); }
+  .btn { height: 36px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; font-family: 'Courier New', monospace; white-space: nowrap; transition: background 0.15s; }
+  .btn:hover { background: var(--bg); }
+  .btn-primary { background: var(--text); color: var(--surface); border-color: var(--text); height: 40px; padding: 0 24px; font-size: 14px; }
+  .btn-primary:hover { background: #2a2a2a; }
+  .btn-danger { color: var(--danger); border-color: var(--danger-border); }
+  .btn-danger:hover { background: var(--danger-bg); }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border-light); }
+  .error-msg { font-size: 12px; font-family: 'Courier New', monospace; color: var(--danger); margin-top: 6px; min-height: 16px; }
+  .hint { font-size: 11px; color: var(--text-hint); font-family: 'Courier New', monospace; margin-top: 10px; line-height: 1.7; }
+  .empty-state { text-align: center; padding: 20px; color: var(--text-hint); font-size: 13px; font-family: 'Courier New', monospace; }
+  @media print {
+    body, html { margin: 0; padding: 0; background: white; }
+    .no-print { display: none !important; }
+    @page { size: A4; margin: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="no-print">
+    <div class="made-by">Made by</div>
+    <h1>Adam <span>Takacs</span></h1>
+    <div class="subtitle">Barcode Label Generator &nbsp;·&nbsp; Code 39 &nbsp;·&nbsp; A4 Print &nbsp;·&nbsp; Offline</div>
+  </header>
+
+  <div class="card no-print">
+    <div class="card-title">Page layout</div>
+    <div class="config-grid">
+      <div class="config-item"><label>Columns</label>
+        <select id="cols"><option value="2">2 columns</option><option value="3" selected>3 columns</option><option value="4">4 columns</option><option value="5">5 columns</option></select></div>
+      <div class="config-item"><label>Rows per page</label>
+        <select id="rows"><option value="5">5 rows</option><option value="8">8 rows</option><option value="10" selected>10 rows</option><option value="13">13 rows</option></select></div>
+      <div class="config-item"><label>Barcode height</label>
+        <select id="bh"><option value="40">Compact</option><option value="55" selected>Standard</option><option value="70">Tall</option></select></div>
+      <div class="config-item"><label>Name font size</label>
+        <select id="namefs"><option value="9">Small (9px)</option><option value="11" selected>Medium (11px)</option><option value="13">Large (13px)</option></select></div>
+      <div class="config-item"><label>Border</label>
+        <select id="showborder"><option value="1" selected>Show border</option><option value="0">No border</option></select></div>
+    </div>
+  </div>
+
+  <div class="card no-print">
+    <div class="card-title">Labels</div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btn-single" onclick="switchMode('single')">Single input</button>
+      <button class="mode-btn" id="btn-dump" onclick="switchMode('dump')">Dump input</button>
+    </div>
+
+    <div id="pane-single" class="pane active">
+      <div class="label-count" id="label-count"></div>
+      <div class="entry-list" id="entry-list"><div class="empty-state">No labels yet — add one below.</div></div>
+      <div class="add-row">
+        <input type="text" id="inp-name" placeholder="Product name" />
+        <input type="text" id="inp-code" class="code-field" placeholder="46870" />
+        <button class="btn" onclick="addLabel()">+ Add</button>
+      </div>
+      <div class="error-msg" id="add-error"></div>
+    </div>
+
+    <div id="pane-dump" class="pane">
+      <p style="font-size:12px;color:var(--text-muted);font-family:'Courier New',monospace;margin-bottom:12px;">
+        Copy your inventory code column from Excel and paste left. Copy the product names column and paste right. Order must match.
+      </p>
+      <div class="dump-grid">
+        <div class="dump-col">
+          <label>Inventory codes — one per line</label>
+          <textarea id="dump-codes" placeholder="46902&#10;46979&#10;46870&#10;46930&#10;46964" oninput="updateDumpCounters()"></textarea>
+          <div class="dump-counter"><span id="codes-count">0 codes</span></div>
+        </div>
+        <div class="dump-col">
+          <label>Product names — one per line</label>
+          <textarea id="dump-names" placeholder="GORDONS PINK GIN 700ML&#10;SUNTORY ROKU GIN 1000ML&#10;ROKU GIN 700ML&#10;FOUR PILLARS OLIVE LEAF GIN 700ML&#10;FORDS GIN 700ML" oninput="updateDumpCounters()"></textarea>
+          <div class="dump-counter">
+            <span id="names-count">0 names</span>
+            <span id="match-status"></span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+        <button class="btn" onclick="loadDump()">Load labels from dump</button>
+        <span id="dump-status" style="font-size:12px;font-family:'Courier New',monospace;color:var(--success);"></span>
+      </div>
+      <div class="error-msg" id="dump-error"></div>
+      <div style="margin-top:16px;border-top:1px solid var(--border-light);padding-top:12px;">
+        <div class="label-count" id="label-count-dump"></div>
+        <div class="entry-list" id="entry-list-dump"><div class="empty-state">No labels loaded yet.</div></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" onclick="printLabels()">⎙ Print / Save PDF</button>
+      <button class="btn btn-danger" onclick="clearAll()">✕ Clear all</button>
+    </div>
+    <div class="error-msg" id="print-error" style="margin-top:0;"></div>
+    <div class="hint">
+      Print dialog → select your printer, or "Save as PDF" to export.<br>
+      Chrome/Edge tip: Margins → "None", enable "Background graphics".
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  CODE 39 — VERIFIED PATTERN TABLE
+//  Source: python-barcode library (ISO 16388 compliant, scanner-verified)
+//  Each pattern = 9 elements: [b0,s0,b1,s1,b2,s2,b3,s3,b4]
+//  1 = narrow, 3 = wide
+//  Even indices (0,2,4,6,8) = bars; Odd indices (1,3,5,7) = spaces
+// ═══════════════════════════════════════════════════════════════════════════
+const C39 = {
+  // Digits
+  '0': [1,1,1,3,3,1,3,1,1],
+  '1': [3,1,1,3,1,1,1,1,3],
+  '2': [1,1,3,3,1,1,1,1,3],
+  '3': [3,1,3,3,1,1,1,1,1],
+  '4': [1,1,1,3,3,1,1,1,3],
+  '5': [3,1,1,3,3,1,1,1,1],
+  '6': [1,1,3,3,3,1,1,1,1],
+  '7': [1,1,1,3,1,1,3,1,3],
+  '8': [3,1,1,3,1,1,3,1,1],
+  '9': [1,1,3,3,1,1,3,1,1],
+  // Letters
+  'A': [3,1,1,1,1,3,1,1,3],
+  'B': [1,1,3,1,1,3,1,1,3],
+  'C': [3,1,3,1,1,3,1,1,1],
+  'D': [1,1,1,1,3,3,1,1,3],
+  'E': [3,1,1,1,3,3,1,1,1],
+  'F': [1,1,3,1,3,3,1,1,1],
+  'G': [1,1,1,1,1,3,3,1,3],
+  'H': [3,1,1,1,1,3,3,1,1],
+  'I': [1,1,3,1,1,3,3,1,1],
+  'J': [1,1,1,1,3,3,3,1,1],
+  'K': [3,1,1,1,1,1,1,3,3],
+  'L': [1,1,3,1,1,1,1,3,3],
+  'M': [3,1,3,1,1,1,1,3,1],
+  'N': [1,1,1,1,3,1,1,3,3],
+  'O': [3,1,1,1,3,1,1,3,1],
+  'P': [1,1,3,1,3,1,1,3,1],
+  'Q': [1,1,1,1,1,1,3,3,3],
+  'R': [3,1,1,1,1,1,3,3,1],
+  'S': [1,1,3,1,1,1,3,3,1],
+  'T': [1,1,1,1,3,1,3,3,1],
+  'U': [3,3,1,1,1,1,1,1,3],
+  'V': [1,3,3,1,1,1,1,1,3],
+  'W': [3,3,3,1,1,1,1,1,1],
+  'X': [1,3,1,1,3,1,1,1,3],
+  'Y': [3,3,1,1,3,1,1,1,1],
+  'Z': [1,3,3,1,3,1,1,1,1],
+  // Symbols
+  '-': [1,3,1,1,1,1,3,1,3],
+  '.': [3,3,1,1,1,1,3,1,1],
+  ' ': [1,3,3,1,1,1,3,1,1],
+  '$': [1,3,1,3,1,3,1,1,1],
+  '/': [1,3,1,3,1,1,1,3,1],
+  '+': [1,3,1,1,1,3,1,3,1],
+  '%': [1,1,1,3,1,3,1,3,1],
+  // Start/Stop — DIFFERENT from '0', wide at positions [1,4,6]
+  '*': [1,3,1,1,3,1,3,1,1]
+};
+
+function isValidC39(s) {
+  return [...s.toUpperCase()].every(c => C39[c] !== undefined);
+}
+
+function buildC39SVG(text, barH, cellWpx) {
+  // Always wrap with * start/stop
+  const chars = ['*', ...text.toUpperCase().split(''), '*'];
+
+  const N = 1;   // narrow unit
+  const W = 3;   // wide unit (1:3 ratio — scanners require minimum 1:2.5)
+  const GAP = 1; // inter-character gap (1 narrow space between characters)
+
+  // Build full element sequence
+  const seq = []; // {w: number, bar: boolean}
+  for (let ci = 0; ci < chars.length; ci++) {
+    const pat = C39[chars[ci]];
+    if (!pat) continue;
+    for (let i = 0; i < 9; i++) {
+      seq.push({ w: pat[i] === 3 ? W : N, bar: (i % 2 === 0) });
+    }
+    // Inter-character gap (narrow space) — not after last char
+    if (ci < chars.length - 1) {
+      seq.push({ w: GAP, bar: false });
+    }
+  }
+
+  // Scale to fit cell width with quiet zones (10× narrow each side)
+  const quietUnits = 10;
+  const totalUnits = quietUnits * 2 + seq.reduce((s, e) => s + e.w, 0);
+  const avail = cellWpx - 4;
+  const scale = avail / totalUnits;
+  // Clamp: don't go below 0.6px per narrow module (minimum printable)
+  const s = Math.max(scale, 0.6);
+  const qpx = quietUnits * s;
+
+  let x = qpx;
+  let rects = '';
+  for (const e of seq) {
+    const w = e.w * s;
+    if (e.bar) {
+      rects += `<rect x="${x.toFixed(3)}" y="0" width="${w.toFixed(3)}" height="${barH}" fill="#000"/>`;
+    }
+    x += w;
+  }
+
+  const svgW = Math.ceil(x + qpx);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${barH}" viewBox="0 0 ${svgW} ${barH}" style="display:block;">${rects}</svg>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  APP
+// ═══════════════════════════════════════════════════════════════════════════
+let labels = [];
+let currentMode = 'single';
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function parseLines(text) {
+  return text.split('\n').map(l => l.trim()).filter(Boolean);
+}
+
+function addLabel() {
+  const nameEl = document.getElementById('inp-name');
+  const codeEl = document.getElementById('inp-code');
+  const errEl  = document.getElementById('add-error');
+  const name = nameEl.value.trim();
+  const code = codeEl.value.trim().toUpperCase();
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'Enter a product name.'; return; }
+  if (!code) { errEl.textContent = 'Enter an inventory code.'; return; }
+  if (!isValidC39(code)) {
+    errEl.textContent = 'Invalid characters. Allowed: A–Z, 0–9, - . $ / + % and space.';
+    return;
+  }
+  labels.push({ name, code });
+  nameEl.value = ''; codeEl.value = '';
+  nameEl.focus();
+  renderList();
+}
+
+function removeLabel(i) { labels.splice(i, 1); renderList(); }
+
+function renderList() {
+  const makeRows = () => !labels.length
+    ? '<div class="empty-state">No labels loaded yet.</div>'
+    : labels.map((l,i) => `
+        <div class="entry-row">
+          <span class="entry-num">${i+1}</span>
+          <span class="entry-name">${escHtml(l.name)}</span>
+          <span class="entry-code">${escHtml(l.code)}</span>
+          <button class="btn-remove" onclick="removeLabel(${i})" title="Remove">×</button>
+        </div>`).join('');
+  const countText = labels.length ? labels.length + ' label' + (labels.length !== 1 ? 's' : '') + ' ready' : '';
+  document.getElementById('entry-list').innerHTML = makeRows();
+  document.getElementById('entry-list-dump').innerHTML = makeRows();
+  document.getElementById('label-count').textContent = countText;
+  document.getElementById('label-count-dump').textContent = countText;
+}
+
+function updateDumpCounters() {
+  const codes = parseLines(document.getElementById('dump-codes').value);
+  const names = parseLines(document.getElementById('dump-names').value);
+  document.getElementById('codes-count').textContent = codes.length + ' code' + (codes.length !== 1 ? 's' : '');
+  document.getElementById('names-count').textContent = names.length + ' name' + (names.length !== 1 ? 's' : '');
+  const ms = document.getElementById('match-status');
+  if (!codes.length && !names.length) { ms.textContent = ''; ms.className = ''; return; }
+  if (codes.length === names.length) { ms.textContent = '✓ counts match'; ms.className = 'match'; }
+  else { ms.textContent = '⚠ ' + Math.abs(codes.length - names.length) + ' off'; ms.className = 'mismatch'; }
+}
+
+function loadDump() {
+  const codes = parseLines(document.getElementById('dump-codes').value);
+  const names = parseLines(document.getElementById('dump-names').value);
+  const errEl = document.getElementById('dump-error');
+  const statusEl = document.getElementById('dump-status');
+  errEl.textContent = ''; statusEl.textContent = '';
+  if (!codes.length && !names.length) { errEl.textContent = 'Paste some codes and names first.'; return; }
+  if (codes.length !== names.length) {
+    errEl.textContent = `Count mismatch: ${codes.length} code${codes.length!==1?'s':''} vs ${names.length} name${names.length!==1?'s':''}. Fix before loading.`;
+    return;
+  }
+  let added = 0, skipped = 0, badCodes = [];
+  codes.forEach((code, i) => {
+    const c = code.toUpperCase();
+    const n = names[i];
+    if (!isValidC39(c)) { skipped++; badCodes.push(c); return; }
+    labels.push({ name: n, code: c });
+    added++;
+  });
+  if (skipped) errEl.textContent = `${skipped} skipped (invalid chars): ${badCodes.slice(0,5).join(', ')}`;
+  statusEl.textContent = added + ' label' + (added!==1?'s':'') + ' loaded.';
+  renderList();
+}
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('btn-single').classList.toggle('active', mode === 'single');
+  document.getElementById('btn-dump').classList.toggle('active', mode === 'dump');
+  document.getElementById('pane-single').classList.toggle('active', mode === 'single');
+  document.getElementById('pane-dump').classList.toggle('active', mode === 'dump');
+}
+
+function clearAll() {
+  if (labels.length && !confirm('Clear all ' + labels.length + ' labels?')) return;
+  labels = [];
+  ['dump-codes','dump-names'].forEach(id => document.getElementById(id).value = '');
+  ['dump-error','dump-status','add-error','print-error'].forEach(id => document.getElementById(id).textContent = '');
+  updateDumpCounters();
+  renderList();
+}
+
+document.getElementById('inp-name').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('inp-code').focus(); });
+document.getElementById('inp-code').addEventListener('keydown', e => { if (e.key==='Enter') addLabel(); });
+document.getElementById('inp-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase(); });
+
+function printLabels() {
+  const printErrEl = document.getElementById('print-error');
+  printErrEl.textContent = '';
+  if (currentMode === 'dump') {
+    const codes = parseLines(document.getElementById('dump-codes').value);
+    const names = parseLines(document.getElementById('dump-names').value);
+    if ((codes.length || names.length) && codes.length !== names.length) {
+      printErrEl.textContent = `⚠ Dump not loaded: ${codes.length} codes vs ${names.length} names — fix mismatch and click "Load labels from dump" first.`;
+      return;
+    }
+  }
+  if (!labels.length) { printErrEl.textContent = 'No labels to print. Add some first.'; return; }
+
+  const cols   = parseInt(document.getElementById('cols').value);
+  const rowsPP = parseInt(document.getElementById('rows').value);
+  const barH   = parseInt(document.getElementById('bh').value);
+  const namefs = parseInt(document.getElementById('namefs').value);
+  const showBorder = document.getElementById('showborder').value === '1';
+  const perPage = cols * rowsPP;
+  const A4W = 794, A4H = 1123, marginH = 38, marginV = 45;
+  const cellW = Math.floor((A4W - marginH*2) / cols);
+  const cellH = Math.floor((A4H - marginV*2) / rowsPP);
+  const borderStyle = showBorder ? '0.5px solid #ccc' : '0.5px solid transparent';
+
+  let pages = '';
+  for (let p = 0; p * perPage < labels.length; p++) {
+    const slice = labels.slice(p*perPage, (p+1)*perPage);
+    while (slice.length < perPage) slice.push(null);
+    let cells = '';
+    slice.forEach(l => {
+      if (!l) { cells += `<div style="width:${cellW}px;height:${cellH}px;border:${borderStyle};display:inline-block;vertical-align:top;"></div>`; return; }
+      const halfH = Math.floor(cellH / 2);
+      const barSvg = buildC39SVG(l.code, barH, cellW);
+      // Use a fit-text div: start at namefs, shrink via JS after render (print handles via SVG foreignObject)
+      const nameId = 'n' + Math.random().toString(36).slice(2);
+      cells += `<div style="width:${cellW}px;height:${cellH}px;border:${borderStyle};display:inline-flex;flex-direction:column;vertical-align:top;overflow:hidden;">
+        <div style="height:${halfH}px;display:flex;align-items:center;justify-content:center;padding:4px 8px;box-sizing:border-box;overflow:hidden;">
+          <div id="${nameId}" style="font-family:Arial,Helvetica,sans-serif;font-size:${namefs}px;font-weight:600;text-align:center;color:#111;width:100%;white-space:normal;word-break:break-word;overflow-wrap:break-word;line-height:1.3;">${escHtml(l.name)}</div>
+        </div>
+        <div style="height:${halfH}px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:2px 4px;box-sizing:border-box;overflow:hidden;">
+          ${barSvg}
+          <div style="font-family:'Courier New',Courier,monospace;font-size:9px;color:#222;letter-spacing:1.5px;text-align:center;white-space:nowrap;">${escHtml(l.code)}</div>
+        </div>
+      </div>`;
+    });
+    pages += `<div style="width:${A4W}px;height:${A4H}px;padding:${marginV}px ${marginH}px;background:white;page-break-after:always;overflow:hidden;">${cells}</div>`;
+  }
+
+  const win = window.open('', '_blank', 'width=920,height=720');
+  if (!win) { printErrEl.textContent = 'Pop-up blocked — allow pop-ups for this page and try again.'; return; }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Barcode Labels</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#d8d8d8;}@media print{body{background:white;}@page{size:A4;margin:0;}}</style>
+</head><body>${pages}<script>
+window.addEventListener('load', function() {
+  // Auto-shrink product name divs to fit their container
+  // Strategy: word-wrap is already enabled, so text will naturally go to 2 lines.
+  // Only shrink font if it still overflows after wrapping.
+  document.querySelectorAll('[id^="n"]').forEach(function(el) {
+    var parent = el.parentElement;
+    var maxH = parent.clientHeight - 8;
+    var fs = parseFloat(el.style.fontSize);
+    // First pass: let wrapping do the work, only shrink if still too tall
+    while (fs > 6 && el.scrollHeight > maxH) {
+      fs -= 0.5;
+      el.style.fontSize = fs + 'px';
+    }
+  });
+  window.print();
+});
+<\/script></body></html>`);
+  win.document.close();
+}
+
+renderList();
+</script>
+</body>
+</html>
