@@ -13,3 +13,6 @@ Created this with a couple iterations to make the creations of barcodes much muc
 
 Barcode-label-generator V2 ------------
 Upon request of same Office manager implemented an option to export as Excel where each cell is a barcode
+
+Shelf Scanner ---------
+I found for me, it is a more efficient workflow to sort out the physical barcodes first, so I thought make I could improve the tedious process of updating the shelves excel. I created this app through Claude where I can upload the csv from Sysnet that stores all the products within their database, and go through each shelf scanning barcodes and making the app pair the descriptions to each product code. At the end it formats an excel with these two properties, and a shelf property to make updating the excel much quicker and easier. 
