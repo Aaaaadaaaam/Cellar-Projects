@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shelf Scan</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#15171b;
+  --panel:#1e2127;
+  --panel-2:#262a32;
+  --line:#343943;
+  --text:#e9ebee;
+  --muted:#8b919c;
+  --amber:#ff7a3d;
+  --amber-dim:#3a2418;
+  --green:#3ddc84;
+  --green-dim:#16331f;
+  --red:#ff5d6c;
+  --red-dim:#3a1820;
+  --mono: ui-monospace, "SF Mono", "Roboto Mono", "Consolas", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:880px;margin:0 auto;padding:28px 18px 60px;}
+.eyebrow{
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--amber);
+  margin:0 0 6px;
+}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-0.01em;}
+.sub{color:var(--muted);font-size:14px;margin:0 0 26px;line-height:1.5;}
+
+.scanline{
+  height:2px;width:100%;
+  background:linear-gradient(90deg, transparent, var(--amber), transparent);
+  background-size:200% 100%;
+  opacity:.55;
+  margin-bottom:22px;
+  animation:sweep 2.8s linear infinite;
+}
+@keyframes sweep{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:20px 20px 22px;
+  margin-bottom:18px;
+}
+.card.disabled{opacity:.45;pointer-events:none;}
+.step-head{
+  display:flex; align-items:center; gap:10px; margin-bottom:14px;
+}
+.step-num{
+  width:24px;height:24px;border-radius:50%;
+  background:var(--amber-dim); color:var(--amber);
+  font-family:var(--mono); font-size:12px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.step-title{font-size:15px;font-weight:600;}
+.step-status{margin-left:auto;font-size:12px;color:var(--muted);font-family:var(--mono);}
+
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
+input[type=text], select{
+  width:100%;
+  background:var(--panel-2);
+  border:1px solid var(--line);
+  color:var(--text);
+  border-radius:8px;
+  padding:10px 12px;
+  font-size:14px;
+  font-family:var(--sans);
+}
+input[type=text]:focus, select:focus{outline:2px solid var(--amber);outline-offset:1px;}
+.row{display:flex;gap:12px;flex-wrap:wrap;}
+.row > div{flex:1;min-width:140px;}
+
+.filebtn{
+  display:inline-flex; align-items:center; gap:8px;
+  background:var(--panel-2); border:1px dashed var(--line);
+  border-radius:10px; padding:14px; cursor:pointer;
+  font-size:13px; color:var(--muted); width:100%;
+  text-align:center; justify-content:center;
+}
+.filebtn:hover{border-color:var(--amber);color:var(--text);}
+input[type=file]{display:none;}
+
+button.primary{
+  background:var(--amber); color:#1a1305; border:none;
+  font-weight:600; font-size:14px; padding:11px 18px;
+  border-radius:9px; cursor:pointer;
+}
+button.primary:hover{filter:brightness(1.08);}
+button.primary:disabled{opacity:.4;cursor:not-allowed;}
+button.ghost{
+  background:transparent; color:var(--muted); border:1px solid var(--line);
+  font-size:13px; padding:9px 14px; border-radius:9px; cursor:pointer;
+}
+button.ghost:hover{color:var(--text);border-color:var(--muted);}
+
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;}
+th{
+  text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--muted); border-bottom:1px solid var(--line); padding:8px 8px;
+}
+td{padding:7px 8px;border-bottom:1px solid var(--line);}
+tr:last-child td{border-bottom:none;}
+.code{font-family:var(--mono);}
+.tag{
+  display:inline-block; font-family:var(--mono); font-size:11px;
+  padding:2px 7px; border-radius:5px; background:var(--panel-2); color:var(--text);
+}
+.notfound{color:var(--red);}
+.found-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:6px;}
+.notfound-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--red);margin-right:6px;}
+.del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;}
+.del:hover{color:var(--red);}
+
+.preview-wrap{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:10px;}
+.preview-wrap table{font-size:12px;}
+.preview-wrap th, .preview-wrap td{white-space:nowrap;}
+
+.stats{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;}
+.stat{font-family:var(--mono);}
+.stat b{color:var(--text);font-size:18px;display:block;}
+.stat span{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;}
+
+.help{font-size:12px;color:var(--muted);line-height:1.6;margin-top:10px;}
+.help b{color:var(--text);}
+.flash{
+  font-size:12px; color:var(--green); margin-top:8px; min-height:14px;
+}
+.scan-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
+.scan-row > div{flex:1;min-width:150px;}
+.table-scroll{max-height:420px;overflow:auto;}
+.active-shelf{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--amber-dim);border:1px solid var(--amber);
+  border-radius:8px;padding:8px 14px;margin-bottom:14px;
+  font-family:var(--mono);font-size:13px;
+}
+.active-shelf span{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;}
+.active-shelf b{color:var(--amber);font-size:16px;}
+.active-shelf.unset{border-color:var(--line);background:var(--panel-2);}
+.active-shelf.unset b{color:var(--muted);}
+.debug{display:none;background:var(--panel-2);border:1px solid var(--amber);border-radius:8px;padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.8;margin-top:12px;color:var(--text);}
+.debug code{background:var(--bg);padding:1px 5px;border-radius:4px;color:var(--amber);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Shelf-by-shelf inventory matching</p>
+  <h1>Shelf Scan</h1>
+  <p class="sub">Load your exported item list once, then scan barcodes shelf by shelf — descriptions fill in automatically from the file you loaded.</p>
+  <div class="scanline"></div>
+
+  <!-- STEP 1 -->
+  <div class="card" id="step1">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div class="step-title">Load your reference file</div>
+      <div class="step-status" id="step1status">no file loaded</div>
+    </div>
+    <label for="fileInput">Export from your stock system (.xlsx, .xls, or .csv)</label>
+    <label class="filebtn" id="fileLabel">
+      <span id="fileLabelText">Click to choose a file, or drag one here</span>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+    </label>
+
+    <div id="sheetPickerWrap" style="display:none;margin-top:14px;">
+      <label for="sheetPicker">Sheet</label>
+      <select id="sheetPicker"></select>
+    </div>
+
+    <div id="previewWrap" style="display:none;margin-top:16px;">
+      <label>Preview (first rows)</label>
+      <div class="preview-wrap"><table id="previewTable"></table></div>
+
+      <div class="row" style="margin-top:14px;">
+        <div>
+          <label for="colCode">Which column is the inventory / item code?</label>
+          <select id="colCode"></select>
+        </div>
+        <div>
+          <label for="colDesc">Which column is the description?</label>
+          <select id="colDesc"></select>
+        </div>
+        <div>
+          <label for="colPar">Par level column (optional)</label>
+          <select id="colPar"></select>
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="primary" id="confirmMapBtn">Use this file</button>
+        <span class="flash" id="mapFlash"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="card disabled" id="step2">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div class="step-title">Scan a shelf</div>
+      <div class="step-status" id="step2status">waiting for reference file</div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+      <div class="active-shelf unset" id="activeShelfBadge">
+        <span>Active shelf</span>
+        <b id="activeShelfLabel">— not set —</b>
+      </div>
+      <button class="primary" id="newShelfBtn" style="padding:9px 16px;font-size:13px;">+ New shelf</button>
+      <button class="ghost" id="undoBtn">Undo last</button>
+    </div>
+
+    <div id="newShelfRow" style="display:none;margin-bottom:14px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="shelfInput" list="shelfList" placeholder="e.g. 7B" autocomplete="off" style="max-width:160px;">
+        <datalist id="shelfList"></datalist>
+        <button class="primary" id="confirmShelfBtn" style="padding:9px 16px;font-size:13px;">Set shelf</button>
+        <button class="ghost" id="cancelShelfBtn">Cancel</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label for="scanInput">Scan here — shelf stays active until you change it</label>
+      <input type="text" id="scanInput" placeholder="Scan a barcode..." autocomplete="off">
+    </div>
+
+    <div class="stats">
+      <div class="stat"><b id="statTotal">0</b><span>items scanned</span></div>
+      <div class="stat"><b id="statShelves">0</b><span>shelves</span></div>
+      <div class="stat"><b id="statMissing">0</b><span>not found</span></div>
+    </div>
+
+    <div class="table-scroll">
+      <table id="scanTable">
+        <thead><tr><th>Shelf</th><th>Code</th><th>Description</th><th>Par</th><th></th></tr></thead>
+        <tbody id="scanBody"></tbody>
+      </table>
+    </div>
+
+    <div class="debug" id="debugPanel"></div>
+    <p class="help">Press <b>+ New shelf</b> to set the active shelf. Scan everything on it. When you move down a shelf, press <b>+ New shelf</b> again. Use <b>Insert after</b> on any row to slip a missed item in after it.</p>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="card disabled" id="step3">
+    <div class="step-head">
+      <div class="step-num">3</div>
+      <div class="step-title">Export</div>
+      <div class="step-status" id="step3status">nothing to export yet</div>
+    </div>
+    <p class="help" style="margin-top:0;">Downloads a spreadsheet sorted by shelf, then in the order you scanned each item — ready to drop into your existing layout.</p>
+    <button class="primary" id="exportBtn">Download spreadsheet (.xlsx)</button>
+    <button class="ghost" id="clearBtn" style="margin-left:8px;">Clear all scans</button>
+  </div>
+</div>
+
+<script>
+let refMap = {};       // normalized code -> {description, par}
+let refLoaded = false;
+let scans = [];        // {order, shelf, code, description, par, found}
+let scanCounter = 0;
+let rawSheetData = []; // current sheet as array of arrays
+let workbookRef = null;
+
+const fileInput = document.getElementById('fileInput');
+const fileLabelText = document.getElementById('fileLabelText');
+const sheetPickerWrap = document.getElementById('sheetPickerWrap');
+const sheetPicker = document.getElementById('sheetPicker');
+const previewWrap = document.getElementById('previewWrap');
+const previewTable = document.getElementById('previewTable');
+const colCode = document.getElementById('colCode');
+const colDesc = document.getElementById('colDesc');
+const colPar = document.getElementById('colPar');
+const confirmMapBtn = document.getElementById('confirmMapBtn');
+const mapFlash = document.getElementById('mapFlash');
+const step1status = document.getElementById('step1status');
+const step2 = document.getElementById('step2');
+const step2status = document.getElementById('step2status');
+const step3 = document.getElementById('step3');
+const step3status = document.getElementById('step3status');
+const shelfInput = document.getElementById('shelfInput');
+const scanInput = document.getElementById('scanInput');
+const shelfList = document.getElementById('shelfList');
+const scanBody = document.getElementById('scanBody');
+const statTotal = document.getElementById('statTotal');
+const statShelves = document.getElementById('statShelves');
+const statMissing = document.getElementById('statMissing');
+const undoBtn = document.getElementById('undoBtn');
+const exportBtn = document.getElementById('exportBtn');
+const clearBtn = document.getElementById('clearBtn');
+const newShelfBtn = document.getElementById('newShelfBtn');
+const confirmShelfBtn = document.getElementById('confirmShelfBtn');
+const cancelShelfBtn = document.getElementById('cancelShelfBtn');
+const newShelfRow = document.getElementById('newShelfRow');
+
+fileInput.addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  fileLabelText.textContent = f.name;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const data = new Uint8Array(ev.target.result);
+    workbookRef = XLSX.read(data, {type:'array'});
+    if(workbookRef.SheetNames.length > 1){
+      sheetPicker.innerHTML = workbookRef.SheetNames.map(n=>`<option value="${n}">${n}</option>`).join('');
+      sheetPickerWrap.style.display = 'block';
+    } else {
+      sheetPickerWrap.style.display = 'none';
+    }
+    loadSheet(workbookRef.SheetNames[0]);
+  };
+  reader.readAsArrayBuffer(f);
+});
+
+sheetPicker.addEventListener('change', ()=> loadSheet(sheetPicker.value));
+
+function loadSheet(name){
+  const ws = workbookRef.Sheets[name];
+  rawSheetData = XLSX.utils.sheet_to_json(ws, {header:1, blankrows:false, defval:''});
+  renderPreview();
+}
+
+function isSysnetFormat(rows){
+  // Sysnet/H&L exports repeat header labels in every row as the first columns.
+  // Signature: col[0]="Stock List", col[2]="Inv. Code", col[3]="Stock Description"
+  if(!rows || rows.length === 0) return false;
+  const r = rows[0].map(v => String(v).trim());
+  return r[0] === 'Stock List' && r[2] === 'Inv. Code' && r[3] === 'Stock Description';
+}
+
+function renderPreview(){
+  if(rawSheetData.length === 0) return;
+
+  // ── Detect Sysnet/H&L export format ──────────────────────────────────────
+  if(isSysnetFormat(rawSheetData)){
+    // In this format every row IS a data row; col 13=InvCode, col 14=Description
+    // Synthesise a clean header row so the UI makes sense
+    const syntheticHeaders = rawSheetData[0].map((v,i) => {
+      if(i === 13) return 'Inv. Code (DATA)';
+      if(i === 14) return 'Stock Description (DATA)';
+      return String(v).trim() || '(blank)';
+    });
+    const previewRows = rawSheetData.slice(0, 5);
+    let html = '<thead><tr>' + syntheticHeaders.map(h=>'<th>'+escapeHtml(h)+'</th>').join('') + '</tr></thead><tbody>';
+    previewRows.forEach(r=>{
+      html += '<tr>' + syntheticHeaders.map((h,i)=>'<td>'+escapeHtml(r[i]!==undefined?r[i]:'')+'</td>').join('') + '</tr>';
+    });
+    html += '</tbody>';
+    previewTable.innerHTML = html;
+
+    const opts = syntheticHeaders.map((h,i)=>'<option value="'+i+'">'+escapeHtml(h)+'</option>').join('');
+    colCode.innerHTML = opts;
+    colDesc.innerHTML = opts;
+    colPar.innerHTML = '<option value="-1">None</option>' + opts;
+    colCode.value = 13;
+    colDesc.value = 14;
+    colPar.value = -1;
+
+    // Override confirmMapBtn to treat ALL rows as data (no header row to skip)
+    rawSheetData._sysnet = true;
+
+    mapFlash.style.color = 'var(--amber)';
+    mapFlash.textContent = 'Sysnet/H&L export detected — columns auto-mapped. Click “Use this file” to confirm.';
+    previewWrap.style.display = 'block';
+    return;
+  }
+
+  // ── Standard format ───────────────────────────────────────────────────────
+  rawSheetData._sysnet = false;
+  const headers = rawSheetData[0].map(h => (h===undefined||h===null||h==='') ? '(blank)' : String(h));
+  const rows = rawSheetData.slice(1, 6);
+
+  let html = '<thead><tr>' + headers.map(h=>'<th>'+escapeHtml(h)+'</th>').join('') + '</tr></thead><tbody>';
+  rows.forEach(r=>{
+    html += '<tr>' + headers.map((h,i)=>'<td>'+escapeHtml(r[i]!==undefined?r[i]:'')+'</td>').join('') + '</tr>';
+  });
+  html += '</tbody>';
+  previewTable.innerHTML = html;
+
+  const opts = headers.map((h,i)=>'<option value="'+i+'">'+escapeHtml(h)+'</option>').join('');
+  colCode.innerHTML = opts;
+  colDesc.innerHTML = opts;
+  colPar.innerHTML = '<option value="-1">None</option>' + opts;
+
+  // best-effort auto guess
+  headers.forEach((h,i)=>{
+    const lh = h.toLowerCase();
+    if(lh.includes('code') || lh.includes('sku') || lh.includes('plu')) colCode.value = i;
+    if(lh.includes('desc') || lh.includes('name') || lh.includes('item')) colDesc.value = i;
+    if(lh.includes('par')) colPar.value = i;
+  });
+
+  previewWrap.style.display = 'block';
+}
+
+confirmMapBtn.addEventListener('click', ()=>{
+  const codeIdx = parseInt(colCode.value);
+  const descIdx = parseInt(colDesc.value);
+  const parIdx = parseInt(colPar.value);
+  if(codeIdx === descIdx){
+    mapFlash.style.color = 'var(--red)';
+    mapFlash.textContent = 'Code and Description can\'t be the same column.';
+    return;
+  }
+  refMap = {};
+  let count = 0;
+  const startRow = rawSheetData._sysnet ? 0 : 1;
+  for(let i=startRow;i<rawSheetData.length;i++){
+    const row = rawSheetData[i];
+    if(!row || row[codeIdx]===undefined || row[codeIdx]==='') continue;
+    const rawCode = String(row[codeIdx]).trim();
+    const desc = row[descIdx]!==undefined ? String(row[descIdx]).trim() : '';
+    const par = parIdx>=0 && row[parIdx]!==undefined ? row[parIdx] : '';
+    const entry = {description: desc, par: par};
+    refMap[normalizeCode(rawCode)] = entry;
+    count++;
+  }
+  refLoaded = true;
+  step1status.textContent = `${count} items loaded`;
+  step1status.style.color = 'var(--green)';
+  mapFlash.style.color = 'var(--green)';
+  mapFlash.textContent = `Loaded ${count} items. You can start scanning below.`;
+  step2.classList.remove('disabled');
+  step2status.textContent = 'ready';
+  scanInput.focus();
+});
+
+function normalizeCode(s){
+  s = String(s).trim();
+  s = s.replace(/^\*+|\*+$/g, ''); // some scanners pass through Code 39 start/stop asterisks
+  s = s.toUpperCase();             // labels are always encoded in uppercase
+  if(/^\d+$/.test(s)){
+    return String(parseInt(s,10)); // strips leading zeros for numeric codes
+  }
+  return s;
+}
+
+// ── Shelf management ─────────────────────────────────────────────────────────
+let activeShelf = '';
+
+function setActiveShelf(v){
+  activeShelf = v;
+  const badge = document.getElementById('activeShelfBadge');
+  const label = document.getElementById('activeShelfLabel');
+  label.textContent = v || '— not set —';
+  badge.classList.toggle('unset', !v);
+  const sl = document.getElementById('shelfList');
+  if(v && !Array.from(sl.options).some(o=>o.value===v)){
+    const opt = document.createElement('option'); opt.value = v;
+    sl.appendChild(opt);
+  }
+}
+
+newShelfBtn.addEventListener('click', ()=>{
+  newShelfRow.style.display = 'block';
+  shelfInput.value = '';
+  shelfInput.focus();
+  newShelfBtn.style.display = 'none';
+});
+
+cancelShelfBtn.addEventListener('click', ()=>{
+  newShelfRow.style.display = 'none';
+  newShelfBtn.style.display = '';
+  scanInput.focus();
+});
+
+function confirmShelf(){
+  const v = shelfInput.value.trim();
+  if(!v) return;
+  setActiveShelf(v);
+  newShelfRow.style.display = 'none';
+  newShelfBtn.style.display = '';
+  scanInput.focus();
+}
+
+confirmShelfBtn.addEventListener('click', confirmShelf);
+shelfInput.addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); confirmShelf(); }
+  if(e.key==='Escape'){ cancelShelfBtn.click(); }
+});
+
+// ── Scan ──────────────────────────────────────────────────────────────────────
+scanInput.addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); commitScan(null); }
+});
+
+function resolveCode(raw){
+  const norm = normalizeCode(raw);
+  const match = refMap[norm];
+  const dbg = document.getElementById('debugPanel');
+  const sampleKeys = Object.keys(refMap).slice(0,8);
+  dbg.innerHTML =
+    '<b>Last scan debug</b><br>' +
+    'Raw from scanner: <code>' + escapeHtml(raw) + '</code> (' + raw.length + ' chars)<br>' +
+    'After normalize: <code>' + escapeHtml(norm) + '</code><br>' +
+    'Match: <b style="color:' + (match?'var(--green)':'var(--red)') + '">' + (match?'YES ✓':'NO ✗') + '</b><br><br>' +
+    'Sample keys in loaded file: ' + sampleKeys.map(k=>'<code>'+escapeHtml(k)+'</code>').join(' &nbsp; ');
+  dbg.style.display = 'block';
+  return {norm, match};
+}
+
+// insertAfterOrder=null => append; number => insert after that order value
+function commitScan(insertAfterOrder){
+  const input = insertAfterOrder !== null
+    ? document.querySelector('.insert-input[data-after="'+insertAfterOrder+'"]')
+    : scanInput;
+  if(!input) return;
+  const raw = input.value.trim();
+  input.value = '';
+  if(!raw) return;
+  const shelf = activeShelf || '(no shelf set)';
+  const {match} = resolveCode(raw);
+  scanCounter++;
+  const entry = {
+    order: scanCounter, shelf,
+    code: raw,
+    description: match ? match.description : 'NOT FOUND - check code',
+    par: match ? match.par : '',
+    found: !!match
+  };
+  if(insertAfterOrder === null){
+    scans.push(entry);
+  } else {
+    const idx = scans.findIndex(s=>s.order===insertAfterOrder);
+    scans.splice(idx+1, 0, entry);
+  }
+  renderScans();
+  if(insertAfterOrder === null){
+    scanInput.focus();
+  } else {
+    const inp = document.querySelector('.insert-input[data-after="'+insertAfterOrder+'"]');
+    if(inp) inp.focus();
+  }
+}
+
+undoBtn.addEventListener('click', ()=>{ scans.pop(); renderScans(); });
+
+// ── Render ────────────────────────────────────────────────────────────────────
+let openInsert = null;
+
+function renderScans(){
+  scanBody.innerHTML = '';
+  const ordered = [...scans].sort((a,b)=>a.order-b.order);
+  ordered.forEach(s=>{
+    const tr = document.createElement('tr');
+    tr.dataset.order = s.order;
+    tr.innerHTML =
+      '<td><span class="tag">'+escapeHtml(s.shelf)+'</span></td>'+
+      '<td class="code">'+escapeHtml(s.code)+'</td>'+
+      '<td class="'+(s.found?'':'notfound')+'">'+
+        '<span class="'+(s.found?'found-dot':'notfound-dot')+'"></span>'+escapeHtml(s.description)+
+      '</td>'+
+      '<td class="code">'+escapeHtml(s.par)+'</td>'+
+      '<td style="white-space:nowrap;">'+
+        '<button class="ins-btn ghost" data-order="'+s.order+'" style="font-size:11px;padding:4px 8px;margin-right:4px;">Insert after</button>'+
+        '<button class="del" data-order="'+s.order+'" title="Remove">✕</button>'+
+      '</td>';
+    scanBody.appendChild(tr);
+
+    if(openInsert===s.order){
+      const itr = document.createElement('tr');
+      itr.className = 'insert-row';
+      itr.innerHTML =
+        '<td colspan="5" style="padding:6px 8px;background:var(--amber-dim);border-left:3px solid var(--amber);">'+
+          '<div style="display:flex;gap:8px;align-items:center;">'+
+            '<span style="font-size:11px;color:var(--amber);font-family:var(--mono);white-space:nowrap;">↳ insert after #'+s.order+'</span>'+
+            '<input class="insert-input" data-after="'+s.order+'" type="text" placeholder="Scan barcode to insert…" autocomplete="off" style="flex:1;">'+
+            '<button class="ghost close-insert" data-order="'+s.order+'" style="font-size:11px;padding:4px 8px;">Done</button>'+
+          '</div>'+
+        '</td>';
+      scanBody.appendChild(itr);
+    }
+  });
+
+  scanBody.querySelectorAll('.ins-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const ord = parseInt(btn.dataset.order);
+      openInsert = (openInsert===ord) ? null : ord;
+      renderScans();
+      if(openInsert!==null){
+        const inp = document.querySelector('.insert-input[data-after="'+ord+'"]');
+        if(inp) inp.focus();
+      }
+    });
+  });
+
+  scanBody.querySelectorAll('.insert-input').forEach(inp=>{
+    inp.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){ e.preventDefault(); commitScan(parseInt(inp.dataset.after)); }
+      if(e.key==='Escape'){ openInsert=null; renderScans(); scanInput.focus(); }
+    });
+  });
+
+  scanBody.querySelectorAll('.close-insert').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ openInsert=null; renderScans(); scanInput.focus(); });
+  });
+
+  scanBody.querySelectorAll('.del').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const ord = parseInt(btn.dataset.order);
+      scans = scans.filter(s=>s.order!==ord);
+      if(openInsert===ord) openInsert=null;
+      renderScans();
+    });
+  });
+
+  const total = scans.length;
+  const shelves = new Set(scans.map(s=>s.shelf)).size;
+  const missing = scans.filter(s=>!s.found).length;
+  statTotal.textContent = total;
+  statShelves.textContent = shelves;
+  statMissing.textContent = missing;
+
+  if(total > 0){
+    step3.classList.remove('disabled');
+    step3status.textContent = total + ' item'+(total===1?'':'s')+' ready';
+  } else {
+    step3.classList.add('disabled');
+    step3status.textContent = 'nothing to export yet';
+  }
+}
+
+exportBtn.addEventListener('click', ()=>{
+  const sorted = [...scans].sort((a,b)=>{
+    const shelfCompare = a.shelf.localeCompare(b.shelf, undefined, {numeric:true, sensitivity:'base'});
+    if(shelfCompare !== 0) return shelfCompare;
+    return a.order - b.order;
+  });
+  const data = sorted.map(s=>({
+    Shelf: s.shelf,
+    InvCode: s.code,
+    Description: s.description,
+    Par: s.par
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:10},{wch:12},{wch:42},{wch:8}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Shelf Scan');
+  XLSX.writeFile(wb, 'shelf_scan_export.xlsx');
+});
+
+clearBtn.addEventListener('click', ()=>{
+  if(scans.length && !confirm('Clear all scanned items? This can\'t be undone.')) return;
+  scans = [];
+  scanCounter = 0;
+  renderScans();
+});
+
+function escapeHtml(v){
+  return String(v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+renderScans();
+</script>
+</body>
+</html>
